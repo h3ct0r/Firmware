@@ -126,7 +126,16 @@ add_custom_target(run_config
 	)
 add_dependencies(run_config px4)
 
-foreach(viewer none jmavsim gazebo replay)
+set(viewers none jmavsim replay)
+if (GAZEBO_FOUND)
+	ExternalProject_Add(sitl_gazebo
+		SOURCE_DIR ${CMAKE_SOURCE_DIR}/Tools/sitl_gazebo
+		CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}
+		)
+	list(APPEND viewers gazebo)
+endif()
+
+foreach(viewer ${viewers})
 	foreach(debugger none gdb lldb ddd valgrind)
 		foreach(model none iris iris_opt_flow tailsitter standard_vtol plane solo typhoon_h480)
 			if (debugger STREQUAL "none")
@@ -143,13 +152,16 @@ foreach(viewer none jmavsim gazebo replay)
 				endif()
 			endif()
 			add_custom_target(${_targ_name}
-				COMMAND Tools/sitl_run.sh "${config_sitl_rcS}"
+				COMMAND ${CMAKE_SOURCE_DIR}/Tools/sitl_run.sh "${config_sitl_rcS}"
 				"${debugger}"
-				"${viewer}" "${model}" "${CMAKE_BINARY_DIR}"
+				"${viewer}" "${model}" "${CMAKE_INSTALL_PREFIX}"
 				WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 				USES_TERMINAL
 				)
-			add_dependencies(${_targ_name} px4)
+			add_dependencies(${_targ_name} px4 dev_install)
+			if (viewer STREQUAL "gazebo")
+				add_dependencies(${_targ_name} sitl_gazebo)
+			endif()
 		endforeach()
 	endforeach()
 endforeach()
@@ -158,8 +170,25 @@ endforeach()
 # install
 #
 
-install(TARGETS px4 DESTINATION bin)
+add_custom_target(dev_install
+	COMMAND "${CMAKE_COMMAND}" --build ${CMAKE_BINARY_DIR} --target install
+	DEPENDS px4)
+
+install(TARGETS px4 DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/ROMFS DESTINATION ${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME})
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/posix-configs DESTINATION ${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME})
+
+#=============================================================================
+# tests
+#
+
+add_test(test_install "${CMAKE_COMMAND}" --build ${CMAKE_BINARY_DIR} --target install)
+add_test(NAME rcS_tests
+	COMMAND ${CMAKE_SOURCE_DIR}/Tools/sitl_run.sh
+		posix-configs/SITL/init/rcS_tests none none none ${CMAKE_INSTALL_PREFIX}
+		WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+set_tests_properties(rcS_tests PROPERTIES
+	PASS_REGULAR_EXPRESSION "All tests passed"
+	DEPENDS test_install)
 
 # vim: set noet ft=cmake fenc=utf-8 ff=unix :

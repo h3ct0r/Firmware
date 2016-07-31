@@ -12,21 +12,37 @@ then
 	exit 1
 fi
 
-SRC_DIR=$1
+SRC_DIR=`realpath $1`
 JOB_DIR=$SRC_DIR/..
 BUILD=posix_sitl_default
+BUILD_DIR=${SRC_DIR}/build_${BUILD}
+DEV_DIR=${BUILD_DIR}/devel
+WORKING_DIR=${DEV_DIR}/tmp
+
+export PX4_SRC_DIR=${SRC_DIR}
+export PX4_DATA_DIR=${DEV_DIR}/share/px4
+export ROS_HOME=${WORKING_DIR}
+
 # TODO
 ROS_TEST_RESULT_DIR=/root/.ros/test_results/px4
 ROS_LOG_DIR=/root/.ros/log
-PX4_LOG_DIR=${SRC_DIR}/build_${BUILD}/src/firmware/posix/rootfs/fs/microsd/log
-TEST_RESULT_TARGET_DIR=$JOB_DIR/test_results
+PX4_LOG_DIR=${WORKING_DIR}/rootfs/fs/microsd/log
+TEST_RESULT_TARGET_DIR=$BULID_DIR/test_results
 # BAGS=/root/.ros
 # CHARTS=/root/.ros/charts
 # EXPORT_CHARTS=/sitl/testing/export_charts.py
 
 # source ROS env
-source /opt/ros/indigo/setup.bash
-source $SRC_DIR/integrationtests/setup_gazebo_ros.bash $SRC_DIR
+if [ -e /opt/ros/indigo/setup.bash ]
+then
+	source /opt/ros/indigo/setup.bash
+elif [ -e /opt/ros/kinetic/setup.bash ]
+then
+	source /opt/ros/kinetic/setup.bash
+fi
+
+source /usr/share/gazebo/setup.sh
+source ${DEV_DIR}/share/mavlink_sitl_gazebo/setup.sh
 
 echo "deleting previous test results ($TEST_RESULT_TARGET_DIR)"
 if [ -d ${TEST_RESULT_TARGET_DIR} ]; then
@@ -43,12 +59,13 @@ ln -s ${SRC_DIR} /root/Firmware
 echo "=====> compile ($SRC_DIR)"
 cd $SRC_DIR
 make ${BUILD}
-make --no-print-directory gazebo_build
 echo "<====="
 
 # don't exit on error anymore from here on (because single tests or exports might fail)
 set +e
 echo "=====> run tests"
+cd $WORKING_DIR
+echo working directory: $PWD
 rostest px4 mavros_posix_tests_iris.launch
 rostest px4 mavros_posix_tests_standard_vtol.launch
 TEST_RESULT=$?

@@ -121,6 +121,12 @@
 # and leads to wrong toolchain detection
 cmake_minimum_required(VERSION 2.8 FATAL_ERROR)
 
+execute_process(
+	COMMAND echo Checking submodules
+	COMMAND Tools/check_submodules.sh
+	WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+	)
+
 # Use clang
 #SET (CMAKE_C_COMPILER /usr/bin/clang-3.6)
 #SET (CMAKE_CXX_COMPILER /usr/bin/clang++-3.6)
@@ -132,7 +138,7 @@ cmake_minimum_required(VERSION 2.8 FATAL_ERROR)
 set(CMAKE_BUILD_TYPE "" CACHE STRING "build type")
 set_property(CACHE CMAKE_BUILD_TYPE PROPERTY
 	STRINGS ";Debug;Release;RelWithDebInfo;MinSizeRel")
-set(CONFIG "nuttx_px4fmu-v2_default" CACHE STRING "desired configuration")
+set(CONFIG "posix_sitl_default" CACHE STRING "desired configuration")
 file(GLOB_RECURSE configs RELATIVE cmake/configs "cmake/configs/*.cmake")
 set_property(CACHE CONFIG PROPERTY STRINGS ${configs})
 set(THREADS "4" CACHE STRING
@@ -155,6 +161,9 @@ message(STATUS "${target_name}")
 # Define GNU standard installation directories
 include(GNUInstallDirs)
 
+# Add support for external project building
+include(ExternalProject)
+
 # Setup install paths
 if(NOT CMAKE_INSTALL_PREFIX)
 	if (${OS} STREQUAL "posix")
@@ -162,11 +171,6 @@ if(NOT CMAKE_INSTALL_PREFIX)
 	endif()
 endif()
 message(STATUS "CMAKE_INSTALL_PREFIX: ${CMAKE_INSTALL_PREFIX}")
-
-# switch to ros CMake file if building ros
-if (${OS} STREQUAL "ros")
-	include("cmake/ros-CMakeLists.txt")
-else()  # otherwise use the rest of this file
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 set(config_module "configs/${CONFIG}")
@@ -199,6 +203,9 @@ if(DEFINED config_df_driver_list)
 	message("DF Drivers: ${config_df_driver_list}")
 endif()
 
+# force static lib build
+set(BUILD_SHARED_LIBS OFF)
+
 #=============================================================================
 # project definition
 #
@@ -221,7 +228,20 @@ set(package-contact "px4users@googlegroups.com")
 #=============================================================================
 # programs
 #
+find_package(catkin REQUIRED)
+if (CATKIN_FOUND)
+	message(STATUS "building as catkin package")
+	catkin_package()
+endif()
 find_package(PythonInterp REQUIRED)
+find_package(gazebo QUIET)
+if (NOT GAZEBO_MAJOR_VERSION)
+	set(GAZEBO_FOUND False)
+	message(STATUS "Gazebo not found")
+else()
+	set(GAZEBO_FOUND True)
+	message(STATUS "Found Gazebo ${GAZEBO_VERSION}")
+endif()
 
 #=============================================================================
 # cmake modules
@@ -394,17 +414,14 @@ set(CPACK_GENERATOR "ZIP")
 set(CPACK_PACKAGE_FILE_NAME "${PROJECT_NAME}-${CONFIG}-${version}")
 set(CPACK_SOURCE_PACKAGE_FILE_NAME "${PROJECT_NAME}-${version}")
 set(CPACK_SOURCE_GENERATOR "ZIP;TBZ2")
+set(CPACK_PACKAGING_INSTALL_PREFIX "/usr")
+set(CPACK_SET_DESTDIR "OFF")
 if ("${CMAKE_SYSTEM}" MATCHES "Linux")
-  find_program(DPKG_PROGRAM dpkg)
-  if (EXISTS ${DPKG_PROGRAM})
-    list (APPEND CPACK_GENERATOR "DEB")
-  endif()
-endif()
-if (${OS} STREQUAL "posix")
-	set(CPACK_SET_DESTDIR "ON")
+	find_program(DPKG_PROGRAM dpkg)
+	if (EXISTS ${DPKG_PROGRAM})
+		list (APPEND CPACK_GENERATOR "DEB")
+	endif()
 endif()
 include(CPack)
-
-endif() # ros alternative endif
 
 # vim: set noet fenc=utf-8 ff=unix ft=cmake :

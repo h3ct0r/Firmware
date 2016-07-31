@@ -21,6 +21,7 @@ Build/*
 Testing/
 build/*
 build_*/
+devel_*/
 core
 cscope.out
 cscope.in.out
